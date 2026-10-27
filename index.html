@@ -10,7 +10,7 @@
        (앞으로 디자인을 바꿔도 이 한 줄만 유지하면 됩니다)
      ════════════════════════════════════════════════════════════ -->
 <script>
-  window.KAKAO_JS_KEY = "d58e05ff18f00ece970154c177dad203";
+  window.KAKAO_JS_KEY = "YOUR_JAVASCRIPT_KEY";
 </script>
 <style>
   :root{
@@ -128,10 +128,10 @@
   .result:hover{background:var(--paper);}
   .result b{font-size:14px;}
   .result span{color:var(--ink-soft);font-size:12px;display:block;}
-  label.fld{display:block;margin-bottom:12px;font-size:13px;color:var(--ink-soft);font-weight:500;}
-  label.fld input,label.fld textarea{width:100%;margin-top:5px;padding:10px 12px;border:1.5px solid var(--line);border-radius:6px;background:var(--paper-2);color:var(--ink);font-family:inherit;font-size:14px;}
-  label.fld textarea{font-family:"Gaegu",cursive;font-size:16px;min-height:60px;}
-  label.fld input[readonly]{color:var(--ink-soft);}
+  .fld{display:block;margin-bottom:12px;font-size:13px;color:var(--ink-soft);font-weight:500;}
+  .fld input,.fld textarea{width:100%;margin-top:5px;padding:10px 12px;border:1.5px solid var(--line);border-radius:6px;background:var(--paper-2);color:var(--ink);font-family:inherit;font-size:14px;}
+  .fld textarea{font-family:"Gaegu",cursive;font-size:16px;min-height:60px;}
+  .fld input[readonly]{color:var(--ink-soft);}
   .ratepick{display:flex;gap:4px;margin-top:6px;}
   .ratepick span{font-size:26px;color:var(--line);cursor:pointer;}
   .ratepick span.on{color:var(--geum);}
@@ -212,10 +212,10 @@
     <label class="fld">방문일<input id="f_date" type="date"></label>
     <label class="fld">평점<div class="ratepick" id="ratePick"><span data-v="1">★</span><span data-v="2">★</span><span data-v="3">★</span><span data-v="4">★</span><span data-v="5">★</span></div></label>
     <label class="fld">맛 메모<textarea id="f_note" placeholder="맛은 어땠나요?"></textarea></label>
-    <label class="fld">음식 유형 (여러 개 선택 가능)
+    <div class="fld">음식 유형 (여러 개 선택 가능)
       <div class="typepick" id="typePick"></div>
       <div class="typeadd"><input id="f_typecustom" type="text" placeholder="직접 추가 (예: 국밥)" autocomplete="off"><button type="button" class="btn ghost small" id="typeAddBtn">추가</button></div>
-    </label>
+    </div>
     <label class="fld">작성자(닉네임)<input id="f_author" type="text" placeholder="예: 미식가 길동" autocomplete="off"></label>
     <div class="form-actions">
       <button type="button" class="btn ghost" id="cancelBtn">취소</button>
