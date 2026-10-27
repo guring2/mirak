@@ -141,6 +141,8 @@
   .keywarn{background:#fff3cd;border:1.5px solid var(--geum);color:#6b4e00;padding:12px 16px;border-radius:6px;margin-bottom:20px;font-size:13.5px;}
   footer{margin-top:30px;text-align:center;color:var(--ink-soft);font-size:12px;}
 </style>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -166,6 +168,7 @@
     <aside class="panel">
       <button class="btn primary" id="addBtn">＋ 맛집 추가</button>
       <button class="btn ghost" id="rouletteBtn">🎲 이번 주 어디 갈까? (지역 뽑기)</button>
+      <button class="btn ghost" id="unlockBtn">🔒 쓰기 잠금 해제</button>
       <div class="backuprow">
         <button class="btn ghost small" id="exportBtn">기록 내보내기</button>
         <button class="btn ghost small" id="importBtn">기록 가져오기</button>
@@ -254,6 +257,24 @@
 (function(){
   "use strict";
   var KEY="matjip_kakao_v1";
+  var firebaseConfig={apiKey:"AIzaSyBhYG9947AgdSywwTXsuSKAc9pdsCbiRf4",authDomain:"mirak-6b73f.firebaseapp.com",projectId:"mirak-6b73f",storageBucket:"mirak-6b73f.firebasestorage.app",messagingSenderId:"332438637985",appId:"1:332438637985:web:ad79afb58a91191ad5cfe0"};
+  firebase.initializeApp(firebaseConfig);
+  var db=firebase.firestore();
+  var COL="places";
+  var editPw=null;try{editPw=sessionStorage.getItem("mirak_pw")||null;}catch(e){}
+  var seededOnce=false;
+  function updateLockUI(){var b=document.getElementById("unlockBtn");if(b)b.textContent=editPw?"🔓 쓰기 가능":"🔒 쓰기 잠금 해제";}
+  function requirePw(){
+    if(editPw)return true;
+    var v=prompt("쓰기 권한이 필요해요. 공유 암호를 입력하세요:");
+    if(v){editPw=v;try{sessionStorage.setItem("mirak_pw",v);}catch(e){}updateLockUI();return true;}
+    return false;
+  }
+  function writePlace(p){
+    if(!requirePw())return;
+    var d=JSON.parse(JSON.stringify(p));d.pw=editPw;
+    db.collection(COL).doc(p.id).set(d).catch(function(e){console.error(e);alert("저장 실패 — 공유 암호가 올바르지 않을 수 있어요.");editPw=null;try{sessionStorage.removeItem("mirak_pw");}catch(_){}updateLockUI();});
+  }
   var SEED_PLACES=[{"name": "2002 마녀의 아르페지오", "addr": "경기 남양주시 와부읍 수레로661번길 142", "lat": 37.62209575843959, "lng": 127.2636457351427, "date": "2026-10-26", "rating": 5, "note": "토마토장 삼겹살, 치즈 추가보다는 본연의 맛 추천", "id": "mvovp3qvrbhl"}, {"name": "능이칼국수", "addr": "충북 보은군 보은읍 성족2길 41", "lat": 36.51183389657344, "lng": 127.75713705103331, "date": "2026-10-26", "rating": 5, "note": "능이 듬뿍, 현지인 맛집", "id": "mvowi5ruexf0"}, {"name": "해용집", "addr": "전북특별자치도 남원시 요천로 2263", "lat": 35.45736895628561, "lng": 127.4344133755719, "date": "2026-10-26", "rating": 5, "note": "신선한 야채, 미친 볶음밥, 더덕과 장어 그리고 양념의 조화로움", "id": "mvox00u5rqc1"}, {"name": "카츠모리조", "addr": "전북특별자치도 전주시 완산구 선너머2길 26", "lat": 35.81423776992717, "lng": 127.1285016848405, "date": "2026-10-26", "rating": 5, "note": "돈까스 끝판왕", "id": "mvoxcr42b4dv"}, {"name": "미당면옥", "addr": "충남 당진시 합덕읍 합덕대덕로 502-22", "lat": 36.8061586974714, "lng": 126.739982885206, "date": "2026-10-26", "rating": 5, "note": "골동면을 먹어야 한다", "id": "mvoxd8cy6g7h"}, {"name": "속초해녀마을", "addr": "강원특별자치도 속초시 바람꽃마을길 37", "lat": 38.198019079120385, "lng": 128.5324051895363, "date": "2026-10-26", "rating": 5, "note": "감칠맛 최고, 셀프 계란후라이 무한리필", "id": "mvoxftubxqqt"}];
   var HOME={lat:36.5,lng:127.8,level:13};
   var PIN_AR=0.962,PIN_GOLD_AR=1.043;
@@ -269,8 +290,14 @@
   function today(){return new Date().toISOString().slice(0,10);}
   function lastAuthor(){try{return localStorage.getItem(AUTHOR_KEY)||"";}catch(e){return"";}}
   function rememberAuthor(a){try{if(a)localStorage.setItem(AUTHOR_KEY,a);}catch(e){}}
-  function load(){try{var r=localStorage.getItem(KEY);places=r?JSON.parse(r):[];}catch(e){places=[];}if(!Array.isArray(places))places=[];if(!places.length){places=JSON.parse(JSON.stringify(SEED_PLACES));}migrate();}
-  function save(){try{localStorage.setItem(KEY,JSON.stringify(places));}catch(e){}}
+  function load(){
+    db.collection(COL).onSnapshot(function(snap){
+      places=snap.docs.map(function(d){var o=d.data();delete o.pw;return o;}).filter(function(p){return !p.deleted;});
+      migrate();renderAll();
+      if(snap.empty&&editPw&&!seededOnce){seededOnce=true;SEED_PLACES.forEach(function(sp){writePlace(JSON.parse(JSON.stringify(sp)));});}
+    },function(err){console.error("firestore",err);alert("데이터 연결 오류: "+(err&&err.code||err));});
+  }
+  function save(){}
   function migrate(){
     places.forEach(function(p){
       if(!Array.isArray(p.types))p.types=[];
@@ -290,18 +317,18 @@
     var p=places.find(function(x){return x.id===id;});if(!p)return;
     if(delta>0){var L=latestLog(p);p.log.push({date:today(),rating:L.rating,note:"",author:L.author||lastAuthor()});}
     else if(p.log.length>1){p.log.pop();}
-    syncMirror(p);save();renderAll();
+    syncMirror(p);writePlace(p);
   }
   function addVisitEntry(id,entry){
     var p=places.find(function(x){return x.id===id;});if(!p)return;
-    p.log.push(entry);rememberAuthor(entry.author);syncMirror(p);save();renderAll();
+    p.log.push(entry);rememberAuthor(entry.author);syncMirror(p);writePlace(p);
   }
   function toggleLike(id,i){
     var p=places.find(function(x){return x.id===id;});if(!p||!p.log[i])return;
     var e=p.log[i];
     if(e.likedByMe){e.likedByMe=false;e.likes=Math.max(0,(e.likes||0)-1);}
     else{e.likedByMe=true;e.likes=(e.likes||0)+1;}
-    save();renderDetail();
+    writePlace(p);renderDetail();
   }
   function findDuplicate(data){
     return places.find(function(p){
@@ -419,7 +446,7 @@
       b.onclick=function(){toggleLike(p.id,parseInt(b.dataset.i,10));};
     });
     document.getElementById("editBtn").onclick=function(){openForm(p);};
-    document.getElementById("delBtn").onclick=function(){if(confirm("‘"+p.name+"’ 기록을 삭제할까요?")){places=places.filter(function(x){return x.id!==p.id;});selectedId=null;save();renderAll();}};
+    document.getElementById("delBtn").onclick=function(){if(confirm("‘"+p.name+"’ 기록을 삭제할까요?")){p.deleted=true;selectedId=null;writePlace(p);}};
   }
 
   function renderList(){
@@ -499,8 +526,8 @@
         if(seen[key]||seen[altkey])return;
         seen[key]=true;seen[altkey]=true;places.push(p);added++;
       });
-      migrate();save();renderAll();
-      alert("기록 "+added+"개를 가져왔어요. (현재 총 "+places.length+"개)");
+      migrate();if(requirePw()){places.forEach(function(pp){writePlace(pp);});}
+      alert("기록 "+added+"개를 가져왔어요. Firestore에 반영됩니다.");
     };
     reader.readAsText(file);
   }
@@ -572,7 +599,7 @@
     rememberAuthor(entry.author);
     if(editId){
       var p=places.find(function(x){return x.id===editId;});
-      if(p){p.name=common.name;p.addr=common.addr;p.lat=common.lat;p.lng=common.lng;p.types=common.types;p.log[0]=entry;syncMirror(p);selectedId=editId;}
+      if(p){p.name=common.name;p.addr=common.addr;p.lat=common.lat;p.lng=common.lng;p.types=common.types;p.log[0]=entry;syncMirror(p);selectedId=editId;writePlace(p);}
     }else{
       var dup=findDuplicate(common);
       if(dup){
@@ -582,9 +609,9 @@
         return;
       }
       var np={id:uid(),name:common.name,addr:common.addr,lat:common.lat,lng:common.lng,types:common.types,log:[entry]};
-      syncMirror(np);places.push(np);selectedId=np.id;
+      syncMirror(np);selectedId=np.id;writePlace(np);
     }
-    save();closeForm();renderAll();
+    closeForm();
   };
 
   // ---- 방문 일지 입력 ----
@@ -663,6 +690,8 @@
   document.getElementById("filter").addEventListener("input",renderList);
   document.getElementById("sort").addEventListener("change",renderList);
 
+  document.getElementById("unlockBtn").onclick=function(){if(editPw){if(confirm("쓰기 잠금을 다시 걸까요?")){editPw=null;try{sessionStorage.removeItem("mirak_pw");}catch(e){}updateLockUI();}}else{requirePw();}};
+  updateLockUI();
   load();renderAll();initMap();
 })();
 </script>
