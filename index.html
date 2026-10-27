@@ -86,6 +86,16 @@
   .visitctl button:hover{border-color:var(--cheong);color:var(--cheong);}
   .badge-dangol{display:inline-block;font-family:"Song Myung",serif;font-size:12px;font-weight:400;color:#8A6A14;background:rgba(201,162,39,.15);border:1.5px solid #C9A227;border-radius:11px;padding:1px 9px;margin-left:6px;vertical-align:middle;}
   .li-dangol{flex:0 0 auto;font-size:10px;color:#8A6A14;border:1px solid #C9A227;background:rgba(201,162,39,.12);border-radius:8px;padding:0 5px;}
+  .li-new{flex:0 0 auto;font-size:9.5px;font-weight:700;color:#fff;background:var(--jujeok);border-radius:7px;padding:1px 5px;letter-spacing:.3px;}
+  .newbanner{display:none;position:relative;background:var(--card);border:1.5px solid var(--geum);border-left:5px solid var(--geum);border-radius:8px;padding:14px 18px;margin-bottom:20px;box-shadow:0 10px 26px -20px var(--shadow);}
+  .newbanner.show{display:block;}
+  .newbanner h3{font-family:"Song Myung",serif;font-size:15px;margin:0 0 8px;color:#8A6A14;}
+  .newbanner ul{margin:0;padding-left:18px;font-size:14px;line-height:1.7;}
+  .newbanner .nb-sub{color:var(--ink-soft);font-size:12.5px;}
+  .newbanner .nb-close{position:absolute;top:10px;right:12px;background:transparent;border:none;color:var(--ink-soft);font-size:16px;cursor:pointer;line-height:1;}
+  #toastWrap{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;}
+  .toast{background:var(--ink);color:var(--paper);font-size:13.5px;padding:10px 16px;border-radius:20px;box-shadow:0 8px 24px rgba(0,0,0,.28);opacity:0;transition:opacity .25s;max-width:82vw;}
+  .toast.show{opacity:0.96;}
   .regionfilter{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;}
   .regionfilter button{font-family:inherit;font-size:12px;color:var(--ink-soft);background:var(--paper-2);border:1.5px solid var(--line);border-radius:14px;padding:4px 11px;cursor:pointer;}
   .regionfilter button:hover{border-color:var(--jujeok);}
@@ -146,6 +156,7 @@
 </head>
 <body>
 <div class="wrap">
+  <div class="newbanner" id="newBanner"></div>
   <div class="keywarn" id="keywarn" style="display:none;">
     ⚠️ 카카오 JavaScript 키가 설정되지 않았어요. 이 파일 상단의 <b>window.KAKAO_JS_KEY = "<u>YOUR_JAVASCRIPT_KEY</u>"</b> 부분에 발급받은 JavaScript 키를 넣고, 카카오 개발자 콘솔에 <b>localhost 도메인</b>을 등록했는지 확인하세요.
   </div>
@@ -263,6 +274,18 @@
   var COL="places";
   var editPw=null;try{editPw=sessionStorage.getItem("mirak_pw")||null;}catch(e){}
   var seededOnce=false;
+  var firstSnap=true,newIdSet={},lastSeen=null,LASTSEEN="mirak_seen_ids";
+  function loadSeen(){try{return JSON.parse(localStorage.getItem(LASTSEEN)||"null");}catch(e){return null;}}
+  function saveSeen(ids){try{localStorage.setItem(LASTSEEN,JSON.stringify(ids));}catch(e){}}
+  function toast(msg){var w=document.getElementById("toastWrap");if(!w)return;var t=document.createElement("div");t.className="toast";t.textContent=msg;w.appendChild(t);requestAnimationFrame(function(){t.classList.add("show");});setTimeout(function(){t.classList.remove("show");setTimeout(function(){t.remove();},300);},3300);}
+  function showNewBanner(){
+    var b=document.getElementById("newBanner");if(!b)return;
+    var list=places.filter(function(p){return newIdSet[p.id];});
+    if(!list.length){b.classList.remove("show");b.innerHTML="";return;}
+    b.innerHTML='<button class="nb-close" id="nbClose" aria-label="닫기">✕</button><h3>지난 방문 이후 새로 추가된 맛집 '+list.length+'곳</h3><ul>'+list.map(function(p){var au=(p.log&&p.log[0]&&p.log[0].author)?' · '+esc(p.log[0].author):'';return '<li>'+esc(p.name)+' <span class="nb-sub">· '+esc(regionShort(p.addr))+au+'</span></li>';}).join("")+'</ul>';
+    b.classList.add("show");
+    document.getElementById("nbClose").onclick=function(){lastSeen=places.map(function(p){return p.id;});saveSeen(lastSeen);newIdSet={};b.classList.remove("show");renderList();};
+  }
   function updateLockUI(){var b=document.getElementById("unlockBtn");if(b)b.textContent=editPw?"🔓 쓰기 가능":"🔒 쓰기 잠금 해제";}
   function requirePw(){
     if(editPw)return true;
@@ -291,10 +314,23 @@
   function lastAuthor(){try{return localStorage.getItem(AUTHOR_KEY)||"";}catch(e){return"";}}
   function rememberAuthor(a){try{if(a)localStorage.setItem(AUTHOR_KEY,a);}catch(e){}}
   function load(){
+    lastSeen=loadSeen();
     db.collection(COL).onSnapshot(function(snap){
+      if(!firstSnap){
+        snap.docChanges().forEach(function(ch){
+          if(ch.type==="added"){var d=ch.doc.data();if(d.deleted)return;if(!newIdSet[ch.doc.id]){newIdSet[ch.doc.id]=1;toast("방금 추가됨: "+(d.name||"새 맛집"));}}
+        });
+      }
       places=snap.docs.map(function(d){var o=d.data();delete o.pw;return o;}).filter(function(p){return !p.deleted;});
-      migrate();renderAll();
-      if(snap.empty&&editPw&&!seededOnce){seededOnce=true;SEED_PLACES.forEach(function(sp){writePlace(JSON.parse(JSON.stringify(sp)));});}
+      migrate();
+      if(firstSnap){
+        firstSnap=false;
+        var curIds=places.map(function(p){return p.id;});
+        if(lastSeen===null){lastSeen=curIds;saveSeen(curIds);}
+        else{var seen={};lastSeen.forEach(function(id){seen[id]=1;});places.forEach(function(p){if(!seen[p.id])newIdSet[p.id]=1;});showNewBanner();}
+        if(snap.empty&&editPw&&!seededOnce){seededOnce=true;SEED_PLACES.forEach(function(sp){writePlace(JSON.parse(JSON.stringify(sp)));});}
+      }
+      renderAll();
     },function(err){console.error("firestore",err);alert("데이터 연결 오류: "+(err&&err.code||err));});
   }
   function save(){}
@@ -343,6 +379,7 @@
   function rateColor(r){if(r>=5)return"#A8392C";if(r>=4)return"#C18A27";if(r>=3)return"#2C6460";return"#7E8363";}
   function starStr(r){var s="";for(var i=1;i<=5;i++)s+=i<=r?"★":"<span class='off'>★</span>";return s;}
   function regionOf(addr){return (addr||"").split(" ")[0]||"-";}
+  function regionShort(addr){var r=regionOf(addr);if(!r||r==="-")return "-";var f=ROULETTE_MAP.f.find(function(ft){return r.indexOf(ft.s)>=0||ft.s.indexOf(r)>=0;});return f?f.s:r;}
 
   function showKeyWarn(){document.getElementById("keywarn").style.display="";}
   function buildMap(){
@@ -400,7 +437,7 @@
   }
   function renderRegionFilter(){
     var box=document.getElementById("regionFilter");if(!box)return;
-    var cnt={};places.forEach(function(p){var r=regionOf(p.addr);cnt[r]=(cnt[r]||0)+1;});
+    var cnt={};places.forEach(function(p){var r=regionShort(p.addr);cnt[r]=(cnt[r]||0)+1;});
     var regions=Object.keys(cnt).sort(function(a,b){return a.localeCompare(b,"ko");});
     if(!regions.length){box.innerHTML="";return;}
     var html='<button class="'+(regionFilter?"":"on")+'" data-r="">전체</button>';
@@ -410,7 +447,7 @@
       b.onclick=function(){var r=b.dataset.r;regionFilter=r||null;renderRegionFilter();renderList();};
     });
   }
-  function regionCount(){var s={};places.forEach(function(p){s[regionOf(p.addr)]=1;});return Object.keys(s).length;}
+  function regionCount(){var s={};places.forEach(function(p){s[regionShort(p.addr)]=1;});return Object.keys(s).length;}
   function renderStats(){document.getElementById("statPlaces").textContent=places.length;document.getElementById("statRegions").textContent=regionCount();}
 
   function renderDetail(){
@@ -454,7 +491,7 @@
     var sortBy=(document.getElementById("sort")||{}).value||"recent";
     var list=document.getElementById("list");
     var items=places.filter(function(p){
-      if(regionFilter&&regionOf(p.addr)!==regionFilter)return false;
+      if(regionFilter&&regionShort(p.addr)!==regionFilter)return false;
       if(typeFilter.length){var ts=p.types||[];for(var ti=0;ti<typeFilter.length;ti++){if(ts.indexOf(typeFilter[ti])<0)return false;}}
       if(!q)return true;
       return p.name.toLowerCase().indexOf(q)>=0 || (p.addr||"").toLowerCase().indexOf(q)>=0 || regionOf(p.addr).toLowerCase().indexOf(q)>=0;
@@ -470,7 +507,7 @@
     list.innerHTML="";
     items.slice().sort(sorters[sortBy]||sorters.recent).forEach(function(p){
       var el=document.createElement("div");el.className="listitem";
-      el.innerHTML='<span class="dot" style="background:'+rateColor(p.rating)+'"></span><span class="li-name">'+esc(p.name)+'</span>'+(isDangol(p)?'<span class="li-dangol">단골</span>':'')+'<span class="li-region">'+esc(regionOf(p.addr))+'</span><span class="li-visit">'+visitsOf(p)+'회</span><button class="li-plus" title="방문 1회 추가">＋</button>';
+      el.innerHTML='<span class="dot" style="background:'+rateColor(p.rating)+'"></span><span class="li-name">'+esc(p.name)+'</span>'+(newIdSet[p.id]?'<span class="li-new">NEW</span>':'')+(isDangol(p)?'<span class="li-dangol">단골</span>':'')+'<span class="li-region">'+esc(regionShort(p.addr))+'</span><span class="li-visit">'+visitsOf(p)+'회</span><button class="li-plus" title="방문 1회 추가">＋</button>';
       el.onclick=function(){select(p.id,true);};
       el.querySelector(".li-plus").onclick=function(ev){ev.stopPropagation();bumpVisit(p.id,1);};
       list.appendChild(el);
@@ -650,13 +687,6 @@
     rMapBuilt=true;
   }
   function rouletteCandidates(){
-    var rec={};places.forEach(function(p){var r=regionOf(p.addr);if(r&&r!=="-")rec[r]=1;});
-    var seen={},pairs=[];
-    Object.keys(rec).forEach(function(r){
-      var f=ROULETTE_MAP.f.find(function(ft){return r.indexOf(ft.s)>=0||ft.s.indexOf(r)>=0;});
-      if(f&&!seen[f.s]){seen[f.s]=1;pairs.push({s:f.s,filter:r});}
-    });
-    if(pairs.length>=2)return pairs;
     return ROULETTE_MAP.f.map(function(ft){return {s:ft.s,filter:ft.s};});
   }
   function highlight(sname){for(var k in rPaths)rPaths[k].classList.toggle("on",k===sname);}
@@ -670,7 +700,10 @@
   document.getElementById("rSpin").onclick=function(){
     if(rspinning)return;
     var sp=document.getElementById("rSpin");
-    if(rResult){regionFilter=rResult.filter;renderRegionFilter();renderList();rdlg.close();return;}
+    if(rResult){regionFilter=rResult.filter;renderRegionFilter();renderList();rdlg.close();
+      var has=places.some(function(p){return regionShort(p.addr)===rResult.filter;});
+      if(!has)setTimeout(function(){alert("‘"+rResult.filter+"’엔 아직 기록이 없어요. 가볼 만한 새 맛집을 개척해보세요!");},120);
+      return;}
     var cand=rouletteCandidates(),res=document.getElementById("rouletteResult");
     rspinning=true;sp.disabled=true;res.textContent="…";
     var delay=70,elapsed=0,total=2400;
@@ -695,5 +728,6 @@
   load();renderAll();initMap();
 })();
 </script>
+<div id="toastWrap"></div>
 </body>
 </html>
