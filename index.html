@@ -40,6 +40,7 @@
   .stat{text-align:center;}
   .stat b{font-family:"Song Myung",serif;font-size:30px;display:block;line-height:1;color:#E8C96B;}
   .stat span{font-size:11.5px;color:#C6B389;}
+  .clockbar{text-align:right;font-family:"Song Myung",serif;font-size:13.5px;color:var(--ink-soft);margin:-18px 0 18px;letter-spacing:.3px;}
   .layout{display:grid;grid-template-columns:1.4fr 1fr;gap:30px;align-items:start;}
   @media (max-width:880px){.layout{grid-template-columns:1fr;gap:24px;}}
   /* 창살(한옥 창호) 디테일 strip */
@@ -173,8 +174,10 @@
     <div class="stats">
       <div class="stat"><b id="statPlaces">0</b><span>기록한 맛집</span></div>
       <div class="stat"><b id="statRegions">0</b><span>방문한 지역</span></div>
+      <div class="stat"><b id="statVisits">–</b><span>누적 방문</span></div>
     </div>
   </header>
+  <div class="clockbar" id="clock"></div>
   <div class="layout">
     <div class="leftcol">
     <section class="mapcard">
@@ -281,6 +284,33 @@
   var firebaseConfig={apiKey:"AIzaSyBhYG9947AgdSywwTXsuSKAc9pdsCbiRf4",authDomain:"mirak-6b73f.firebaseapp.com",projectId:"mirak-6b73f",storageBucket:"mirak-6b73f.firebasestorage.app",messagingSenderId:"332438637985",appId:"1:332438637985:web:ad79afb58a91191ad5cfe0"};
   firebase.initializeApp(firebaseConfig);
   var db=firebase.firestore();
+  function startClock(){
+    var el=document.getElementById("clock");if(!el)return;
+    var days=["일","월","화","수","목","금","토"];
+    function pad(n){return(n<10?"0":"")+n;}
+    function tick(){
+      var d=new Date();
+      el.textContent=d.getFullYear()+"년 "+(d.getMonth()+1)+"월 "+d.getDate()+"일 ("+days[d.getDay()]+") "+pad(d.getHours())+":"+pad(d.getMinutes())+":"+pad(d.getSeconds());
+      setTimeout(tick,1000);
+    }
+    tick();
+  }
+  function countVisit(){
+    var ref=db.collection("meta").doc("stats");
+    // 실시간으로 누적 방문수 표시
+    ref.onSnapshot(function(doc){
+      var v=doc.exists&&doc.data().visits?doc.data().visits:0;
+      var el=document.getElementById("statVisits");if(el)el.textContent=v.toLocaleString();
+    },function(e){console.error(e);});
+    // 하루 1회만 +1
+    var today=new Date().toISOString().slice(0,10),last=null;
+    try{last=localStorage.getItem("mirak_visit_day");}catch(e){}
+    if(last!==today){
+      ref.set({visits:firebase.firestore.FieldValue.increment(1)},{merge:true})
+        .then(function(){try{localStorage.setItem("mirak_visit_day",today);}catch(e){}})
+        .catch(function(e){console.error("visit count",e);});
+    }
+  }
   var COL="places";
   var editPw="mirakForever1018!";
   var seededOnce=false;
@@ -728,6 +758,7 @@
   document.getElementById("sort").addEventListener("change",renderList);
 
   updateLockUI();
+  startClock();countVisit();
   load();renderAll();initMap();
 })();
 </script>
