@@ -130,6 +130,14 @@
   .roulette-map .rprov{fill:var(--land);stroke:var(--land-edge);stroke-width:0.8;transition:fill .07s;}
   .roulette-map .rprov.on{fill:var(--jujeok);}
   .roulette-result{font-family:"Song Myung",serif;font-size:30px;color:var(--jujeok);min-height:40px;margin:2px 0 14px;letter-spacing:2px;}
+  .voterow{margin-bottom:10px;cursor:pointer;}
+  .voterow .vbar-top{display:flex;justify-content:space-between;align-items:baseline;font-size:14px;margin-bottom:4px;}
+  .voterow .vname{font-weight:500;color:var(--ink);}
+  .voterow.mine .vname{color:var(--jujeok);font-weight:700;}
+  .voterow .vcount{font-size:12.5px;color:var(--ink-soft);}
+  .voterow .vbar{height:16px;background:var(--paper-2);border:1.5px solid var(--line);border-radius:9px;overflow:hidden;}
+  .voterow .vfill{height:100%;background:var(--cheong);width:0;transition:width .4s;}
+  .voterow.mine .vfill{background:var(--jujeok);}
   .empty{text-align:center;color:var(--ink-soft);font-size:14px;padding:24px 10px;}
   .empty b{display:block;font-family:"Song Myung",serif;color:var(--ink);font-size:17px;margin-bottom:6px;}
   dialog.form{border:1.5px solid var(--ink);border-radius:8px;padding:0;background:var(--card);color:var(--ink);max-width:460px;width:92vw;}
@@ -193,6 +201,7 @@
     <aside class="panel">
       <button class="btn primary" id="addBtn">＋ 맛집 추가</button>
       <button class="btn ghost" id="rouletteBtn">🎲 이번 주 어디 갈까? (지역 뽑기)</button>
+      <button class="btn ghost" id="voteBtn">🗳️ 닉네임 투표</button>
       <div class="backuprow">
         <button class="btn ghost small" id="exportBtn">기록 내보내기</button>
         <button class="btn ghost small" id="importBtn">기록 가져오기</button>
@@ -264,6 +273,16 @@
   </div>
 </dialog>
 
+<dialog class="form" id="voteDlg">
+  <div class="form-inner">
+    <h3>닉네임 투표</h3>
+    <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 14px;">마음에 드는 닉네임에 한 표! (다시 누르면 변경돼요)</p>
+    <div id="voteList"></div>
+    <div class="typeadd" style="margin-top:12px;"><input id="voteCustom" type="text" placeholder="기타 — 새 닉네임 추천" autocomplete="off"><button type="button" class="btn ghost small" id="voteAddBtn">추가</button></div>
+    <div class="form-actions" style="margin-top:14px;"><button type="button" class="btn primary" id="voteClose">닫기</button></div>
+  </div>
+</dialog>
+
 <dialog class="form" id="rouletteDlg">
   <div class="form-inner" style="text-align:center;">
     <h3>이번 주 어디 갈까?</h3>
@@ -284,6 +303,40 @@
   var firebaseConfig={apiKey:"AIzaSyBhYG9947AgdSywwTXsuSKAc9pdsCbiRf4",authDomain:"mirak-6b73f.firebaseapp.com",projectId:"mirak-6b73f",storageBucket:"mirak-6b73f.firebasestorage.app",messagingSenderId:"332438637985",appId:"1:332438637985:web:ad79afb58a91191ad5cfe0"};
   firebase.initializeApp(firebaseConfig);
   var db=firebase.firestore();
+  var BASE_NICKS=["미락아재","미락왕자","미락동쟈"];
+  var voteData={},myVote=null,voteDlgEl=null;
+  function loadMyVote(){try{myVote=localStorage.getItem("mirak_myvote")||null;}catch(e){myVote=null;}}
+  function voteRef(){return db.collection("meta").doc("nickvote");}
+  function initVote(){
+    loadMyVote();
+    voteRef().onSnapshot(function(doc){voteData=(doc.exists&&doc.data().tally)||{};renderVote();},function(e){console.error("vote",e);});
+  }
+  function allNicks(){
+    var set={};BASE_NICKS.forEach(function(n){set[n]=1;});Object.keys(voteData).forEach(function(n){set[n]=1;});
+    return Object.keys(set);
+  }
+  function renderVote(){
+    var box=document.getElementById("voteList");if(!box)return;
+    var nicks=allNicks();
+    var max=1;nicks.forEach(function(n){if((voteData[n]||0)>max)max=voteData[n];});
+    var total=0;nicks.forEach(function(n){total+=(voteData[n]||0);});
+    box.innerHTML=nicks.map(function(n){
+      var c=voteData[n]||0,pct=Math.round(c/max*100);
+      return '<div class="voterow'+(myVote===n?" mine":"")+'" data-n="'+esc(n)+'"><div class="vbar-top"><span class="vname">'+esc(n)+(myVote===n?" ✓":"")+'</span><span class="vcount">'+c+'표</span></div><div class="vbar"><div class="vfill" style="width:'+pct+'%"></div></div></div>';
+    }).join("")+'<div style="font-size:12px;color:var(--ink-soft);margin-top:6px;">총 '+total+'표</div>';
+    Array.prototype.forEach.call(box.querySelectorAll(".voterow"),function(r){r.onclick=function(){castVote(r.dataset.n);};});
+  }
+  function castVote(nick){
+    if(myVote===nick)return;
+    var updates={},prev=myVote;
+    updates["tally."+nick]=firebase.firestore.FieldValue.increment(1);
+    if(prev)updates["tally."+prev]=firebase.firestore.FieldValue.increment(-1);
+    voteRef().set({tally:{}},{merge:true}).then(function(){
+      return voteRef().update(updates);
+    }).then(function(){
+      myVote=nick;try{localStorage.setItem("mirak_myvote",nick);}catch(e){}
+    }).catch(function(e){console.error("castVote",e);alert("투표 저장 실패 — 잠시 후 다시 시도해주세요.");});
+  }
   function startClock(){
     var el=document.getElementById("clock");if(!el)return;
     var days=["일","월","화","수","목","금","토"];
@@ -724,6 +777,14 @@
     return ROULETTE_MAP.f.map(function(ft){return {s:ft.s,filter:ft.s};});
   }
   function highlight(sname){for(var k in rPaths)rPaths[k].classList.toggle("on",k===sname);}
+  voteDlgEl=document.getElementById("voteDlg");
+  document.getElementById("voteBtn").onclick=function(){renderVote();if(voteDlgEl.showModal)voteDlgEl.showModal();else voteDlgEl.setAttribute("open","");};
+  document.getElementById("voteClose").onclick=function(){if(voteDlgEl.open)voteDlgEl.close();};
+  document.getElementById("voteAddBtn").onclick=function(){
+    var inp=document.getElementById("voteCustom"),v=inp.value.trim();
+    if(!v)return;inp.value="";castVote(v);
+  };
+  document.getElementById("voteCustom").addEventListener("keydown",function(e){if(e.key==="Enter"){e.preventDefault();document.getElementById("voteAddBtn").click();}});
   document.getElementById("rouletteBtn").onclick=function(){
     buildRouletteMap();rResult=null;rspinning=false;highlight(null);
     document.getElementById("rouletteResult").textContent="?";
@@ -758,7 +819,7 @@
   document.getElementById("sort").addEventListener("change",renderList);
 
   updateLockUI();
-  startClock();countVisit();
+  startClock();countVisit();initVote();
   load();renderAll();initMap();
 })();
 </script>
