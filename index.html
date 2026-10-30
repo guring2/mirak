@@ -303,7 +303,7 @@
   var firebaseConfig={apiKey:"AIzaSyBhYG9947AgdSywwTXsuSKAc9pdsCbiRf4",authDomain:"mirak-6b73f.firebaseapp.com",projectId:"mirak-6b73f",storageBucket:"mirak-6b73f.firebasestorage.app",messagingSenderId:"332438637985",appId:"1:332438637985:web:ad79afb58a91191ad5cfe0"};
   firebase.initializeApp(firebaseConfig);
   var db=firebase.firestore();
-  var BASE_NICKS=["미락아재","미락왕자","미락동쟈"];
+  var BASE_NICKS=["미락아재","미락왕자","미락동자"];
   var voteData={},myVote=null,voteDlgEl=null;
   function loadMyVote(){try{myVote=localStorage.getItem("mirak_myvote")||null;}catch(e){myVote=null;}}
   function voteRef(){return db.collection("meta").doc("nickvote");}
@@ -328,12 +328,10 @@
   }
   function castVote(nick){
     if(myVote===nick)return;
-    var updates={},prev=myVote;
-    updates["tally."+nick]=firebase.firestore.FieldValue.increment(1);
-    if(prev)updates["tally."+prev]=firebase.firestore.FieldValue.increment(-1);
-    voteRef().set({tally:{}},{merge:true}).then(function(){
-      return voteRef().update(updates);
-    }).then(function(){
+    var prev=myVote,tally={};
+    tally[nick]=firebase.firestore.FieldValue.increment(1);
+    if(prev&&prev!==nick)tally[prev]=firebase.firestore.FieldValue.increment(-1);
+    voteRef().set({tally:tally},{merge:true}).then(function(){
       myVote=nick;try{localStorage.setItem("mirak_myvote",nick);}catch(e){}
     }).catch(function(e){console.error("castVote",e);alert("투표 저장 실패 — 잠시 후 다시 시도해주세요.");});
   }
