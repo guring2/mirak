@@ -137,6 +137,21 @@
   .voterow .vcount{font-size:12.5px;color:var(--ink-soft);}
   .voterow .vbar{height:16px;background:var(--paper-2);border:1.5px solid var(--line);border-radius:9px;overflow:hidden;}
   .voterow .vfill{height:100%;background:var(--cheong);width:0;transition:width .4s;}
+  .statgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;}
+  .statbox{background:var(--paper-2);border:1.5px solid var(--line);border-radius:8px;padding:12px 8px;text-align:center;}
+  .statbox b{font-family:"Song Myung",serif;font-size:24px;color:var(--jujeok);display:block;line-height:1.1;}
+  .statbox span{font-size:11.5px;color:var(--ink-soft);}
+  .stats-sec{margin-bottom:16px;}
+  .stats-sec h4{font-family:"Song Myung",serif;font-size:14px;margin:0 0 8px;color:var(--ink);}
+  .statrow{display:flex;align-items:baseline;gap:8px;font-size:13px;margin-bottom:6px;}
+  .statrow .sr-rank{color:var(--geum);font-weight:700;width:18px;flex:0 0 auto;}
+  .statrow .sr-name{color:var(--ink);font-weight:500;}
+  .statrow .sr-sub{color:var(--ink-soft);font-size:12px;margin-left:auto;}
+  .statbar{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12.5px;}
+  .statbar .sb-label{width:70px;flex:0 0 auto;color:var(--ink);}
+  .statbar .sb-track{flex:1;height:14px;background:var(--paper-2);border:1.5px solid var(--line);border-radius:8px;overflow:hidden;}
+  .statbar .sb-fill{height:100%;background:var(--cheong);}
+  .statbar .sb-val{width:40px;flex:0 0 auto;text-align:right;color:var(--ink-soft);}
   .voterow.mine .vfill{background:var(--jujeok);}
   .empty{text-align:center;color:var(--ink-soft);font-size:14px;padding:24px 10px;}
   .empty b{display:block;font-family:"Song Myung",serif;color:var(--ink);font-size:17px;margin-bottom:6px;}
@@ -201,6 +216,7 @@
     <aside class="panel">
       <button class="btn primary" id="addBtn">＋ 맛집 추가</button>
       <button class="btn ghost" id="rouletteBtn">🎲 이번 주 어디 갈까? (지역 뽑기)</button>
+      <button class="btn ghost" id="statsBtn">📊 우리들의 미식 결산</button>
       <button class="btn ghost" id="voteBtn" style="display:none;">🗳️ 닉네임 투표</button>
       <div class="backuprow">
         <button class="btn ghost small" id="exportBtn">기록 내보내기</button>
@@ -270,6 +286,14 @@
       <button type="button" class="btn ghost" id="vCancel">취소</button>
       <button type="button" class="btn primary" id="vSave">기록 추가</button>
     </div>
+  </div>
+</dialog>
+
+<dialog class="form" id="statsDlg">
+  <div class="form-inner">
+    <h3>우리들의 미식 결산</h3>
+    <div id="statsBody"></div>
+    <div class="form-actions" style="margin-top:14px;"><button type="button" class="btn primary" id="statsClose">닫기</button></div>
   </div>
 </dialog>
 
@@ -610,6 +634,36 @@
   }
   document.getElementById("resetView").onclick=resetView;
   function renderAll(){renderMarkers();renderStats();renderRegionFilter();renderTypeFilter();renderDetail();renderList();}
+  function renderStatsReport(){
+    var box=document.getElementById("statsBody");if(!box)return;
+    var n=places.length;
+    if(!n){box.innerHTML='<div class="empty"><b>아직 기록이 없어요</b>맛집을 추가하면 결산이 채워져요.</div>';return;}
+    var totalVisits=0,ratingSum=0,dangol=0,five=0;
+    places.forEach(function(p){var v=visitsOf(p);totalVisits+=v;ratingSum+=(p.rating||0);if(v>=DANGOL)dangol++;if((p.rating||0)>=5)five++;});
+    var avg=(ratingSum/n).toFixed(1);
+    var topVisit=places.slice().sort(function(a,b){return visitsOf(b)-visitsOf(a);}).slice(0,3);
+    var rc={};places.forEach(function(p){var r=regionShort(p.addr);rc[r]=(rc[r]||0)+1;});
+    var regionArr=Object.keys(rc).map(function(k){return [k,rc[k]];}).sort(function(a,b){return b[1]-a[1];});
+    var tc={};places.forEach(function(p){(p.types||[]).forEach(function(t){tc[t]=(tc[t]||0)+1;});});
+    var typeArr=Object.keys(tc).map(function(k){return [k,tc[k]];}).sort(function(a,b){return b[1]-a[1];});
+    var ac={};places.forEach(function(p){(p.log||[]).forEach(function(e){if(e.author)ac[e.author]=(ac[e.author]||0)+1;});});
+    var authorArr=Object.keys(ac).map(function(k){return [k,ac[k]];}).sort(function(a,b){return b[1]-a[1];});
+    function bars(arr,unit){if(!arr.length)return '<div class="sr-sub">기록 없음</div>';var mx=arr[0][1]||1;return arr.slice(0,6).map(function(it){var pct=Math.round(it[1]/mx*100);return '<div class="statbar"><span class="sb-label">'+esc(it[0])+'</span><span class="sb-track"><span class="sb-fill" style="width:'+pct+'%"></span></span><span class="sb-val">'+it[1]+unit+'</span></div>';}).join("");}
+    var html='';
+    html+='<div class="statgrid">'+
+      '<div class="statbox"><b>'+n+'</b><span>기록한 맛집</span></div>'+
+      '<div class="statbox"><b>'+totalVisits+'</b><span>총 방문</span></div>'+
+      '<div class="statbox"><b>'+regionCount()+'</b><span>방문 지역</span></div>'+
+      '<div class="statbox"><b>'+avg+'</b><span>평균 평점</span></div>'+
+      '<div class="statbox"><b>'+dangol+'</b><span>단골집</span></div>'+
+      '<div class="statbox"><b>'+five+'</b><span>★5 맛집</span></div>'+
+      '</div>';
+    html+='<div class="stats-sec"><h4>🏆 가장 많이 간 맛집</h4>'+topVisit.map(function(p,i){return '<div class="statrow"><span class="sr-rank">'+(i+1)+'</span><span class="sr-name">'+esc(p.name)+'</span><span class="sr-sub">'+esc(regionShort(p.addr))+' · '+visitsOf(p)+'회</span></div>';}).join("")+'</div>';
+    html+='<div class="stats-sec"><h4>🗺️ 지역별 분포</h4>'+bars(regionArr,"곳")+'</div>';
+    html+='<div class="stats-sec"><h4>🍽️ 인기 음식 유형</h4>'+bars(typeArr,"곳")+'</div>';
+    if(authorArr.length)html+='<div class="stats-sec"><h4>✍️ 많이 남긴 미식가</h4>'+bars(authorArr,"건")+'</div>';
+    box.innerHTML=html;
+  }
 
   // ---- 백업: 내보내기 / 가져오기 ----
   function pad2(n){return(n<10?"0":"")+n;}
@@ -775,6 +829,9 @@
     return ROULETTE_MAP.f.map(function(ft){return {s:ft.s,filter:ft.s};});
   }
   function highlight(sname){for(var k in rPaths)rPaths[k].classList.toggle("on",k===sname);}
+  var statsDlgEl=document.getElementById("statsDlg");
+  document.getElementById("statsBtn").onclick=function(){renderStatsReport();if(statsDlgEl.showModal)statsDlgEl.showModal();else statsDlgEl.setAttribute("open","");};
+  document.getElementById("statsClose").onclick=function(){if(statsDlgEl.open)statsDlgEl.close();};
   voteDlgEl=document.getElementById("voteDlg");
   document.getElementById("voteBtn").onclick=function(){renderVote();if(voteDlgEl.showModal)voteDlgEl.showModal();else voteDlgEl.setAttribute("open","");};
   document.getElementById("voteClose").onclick=function(){if(voteDlgEl.open)voteDlgEl.close();};
