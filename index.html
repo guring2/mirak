@@ -556,7 +556,7 @@
       var pos=new kakao.maps.LatLng(p.lat,p.lng);
       var wish=p.status==="wish",dangol=isDangol(p);
       var src=wish?PIN_WISH:(dangol?PIN_GOLD:PIN_IMG),ar=wish?PIN_WISH_AR:(dangol?PIN_GOLD_AR:PIN_AR);
-      var H=wish?48:(dangol?56:44),W=Math.round(H*ar);
+      var H=wish?34:(dangol?38:30),W=Math.round(H*ar);
       var img=new kakao.maps.MarkerImage(src,new kakao.maps.Size(W,H),{offset:new kakao.maps.Point(Math.round(W/2),H)});
       var mk=new kakao.maps.Marker({position:pos,image:img,map:map});
       kakao.maps.event.addListener(mk,"click",function(){select(p.id,true);});
